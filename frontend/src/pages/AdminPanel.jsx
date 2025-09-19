@@ -54,7 +54,7 @@ function AdminPanelInner() {
                         <button disabled={authLoading} className="w-full px-4 py-2 bg-teal-700 text-white rounded hover:bg-teal-800">
                             {authLoading ? 'Signing in...' : 'Sign in as Admin'}
                         </button>
-                        <p className="text-xs text-gray-500">Demo: admin@sipnsearch.app / admin123</p>
+                        <p className="text-xs text-gray-500">Use an admin account to proceed</p>
                     </form>
 				</div>
 			</div>

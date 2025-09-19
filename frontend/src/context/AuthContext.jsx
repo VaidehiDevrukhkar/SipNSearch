@@ -8,16 +8,18 @@ export function AuthProvider({ children }) {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
 
-	useEffect(() => {
-		// Initialize from persisted session
-		setUser(auth.getCurrentUser());
-		setLoading(false);
-	}, []);
+    useEffect(() => {
+        const unsub = auth.onAuthStateChanged(async (u) => {
+            setUser(u);
+            setLoading(false);
+        });
+        return () => unsub && unsub();
+    }, []);
 
-	async function login(email, password) {
+    async function login(email, password) {
 		setError(null);
 		try {
-			const session = auth.signInWithEmailAndPassword(email, password);
+            const session = await auth.signInWithEmailAndPassword(email, password);
 			setUser(session);
 			return session;
 		} catch (e) {
@@ -26,10 +28,10 @@ export function AuthProvider({ children }) {
 		}
 	}
 
-	async function signup(email, password, profile) {
+    async function signup(email, password, profile) {
 		setError(null);
 		try {
-			const session = auth.createUserWithEmailAndPassword(email, password, profile);
+            const session = await auth.createUserWithEmailAndPassword(email, password, profile);
 			setUser(session);
 			return session;
 		} catch (e) {
@@ -39,20 +41,22 @@ export function AuthProvider({ children }) {
 	}
 
 	function logout() {
-		auth.signOut();
+        auth.signOut();
 		setUser(null);
 	}
 
 	const value = useMemo(() => ({
 		user,
 		isAuthenticated: !!user,
-		isAdmin: !!user?.isAdmin,
+        isAdmin: !!user?.isAdmin || user?.role === 'admin' || user?.role === 'owner',
+        role: user?.role || 'user',
 		loading,
 		error,
 		login,
+        loginWithGoogle: auth.signInWithGoogle,
 		signup,
 		logout
-	}), [user, loading, error]);
+    }), [user, loading, error]);
 
 	return (
 		<AuthContext.Provider value={value}>

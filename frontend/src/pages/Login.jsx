@@ -1,8 +1,12 @@
 // src/pages/Login.jsx
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Coffee, Mail, Lock, AlertCircle } from 'lucide-react';
 
 const Login = () => {
+  const { login, loginWithGoogle, error: authError } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -52,24 +56,25 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Mock successful login
-      console.log('Login successful:', formData);
-      // In real app: redirect to dashboard or previous page
-      alert('Login successful! Redirecting...');
-      
+      await login(formData.email, formData.password);
+      navigate('/');
     } catch (error) {
-      setErrors({ general: 'Login failed. Please check your credentials.' });
+      setErrors({ general: error?.message || 'Login failed. Please check your credentials.' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleLogin = () => {
-    console.log('Google login clicked');
-    // In real app: implement Google OAuth
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      await loginWithGoogle();
+      navigate('/');
+    } catch (error) {
+      setErrors({ general: error?.message || 'Google sign-in failed.' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleFacebookLogin = () => {
@@ -100,10 +105,10 @@ const Login = () => {
         <div className="bg-white rounded-xl shadow-lg p-8">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {/* General Error */}
-            {errors.general && (
+            {(errors.general || authError) && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-2">
                 <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                <span className="text-red-700 text-sm">{errors.general}</span>
+                <span className="text-red-700 text-sm">{errors.general || authError}</span>
               </div>
             )}
 

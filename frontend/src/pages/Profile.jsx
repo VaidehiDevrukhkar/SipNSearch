@@ -1,5 +1,5 @@
 // src/pages/Profile.jsx
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   User, Mail, Phone, MapPin, Calendar, Camera, Edit3, Save, X, 
   Heart, Star, MessageSquare, Coffee, Award, Settings, LogOut 
@@ -9,29 +9,22 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import CafeCard from '../components/CafeCard';
 import ReviewCard from '../components/ReviewCard';
+import { useAuth } from '../context/AuthContext';
+import { firestoreInstance } from '../services/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-// Mock user data
-const mockUser = {
-  id: 1,
-  firstName: 'Sarah',
-  lastName: 'Johnson',
-  email: 'sarah.johnson@email.com',
-  phone: '+91 98765 43210',
-  location: 'Mumbai, Maharashtra',
-  joinDate: '2023-06-15',
-  avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=200',
-  bio: 'Coffee enthusiast and cafe explorer. Love discovering hidden gems and cozy spots around the city.',
-  stats: {
-    reviewsCount: 23,
-    favoritesCount: 18,
-    photosCount: 45,
-    helpfulVotes: 156
-  },
-  preferences: {
-    preferredPrice: '$$',
-    favoriteAmenities: ['wifi', 'outdoor-seating', 'quiet'],
-    dietaryRestrictions: ['vegan-friendly']
-  }
+// Default profile shape for safety
+const emptyProfile = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  location: '',
+  joinDate: '',
+  avatar: '',
+  bio: '',
+  stats: { reviewsCount: 0, favoritesCount: 0, photosCount: 0, helpfulVotes: 0 },
+  preferences: { preferredPrice: '$$', favoriteAmenities: [], dietaryRestrictions: [] }
 };
 
 const mockFavorites = [
@@ -91,17 +84,54 @@ const mockReviews = [
 ];
 
 const Profile = () => {
-  const [user, setUser] = useState(mockUser);
+  const { user: authUser, loading } = useAuth();
+  const [user, setUser] = useState(emptyProfile);
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    phone: user.phone,
-    location: user.location,
-    bio: user.bio
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    location: '',
+    bio: ''
   });
+
+  // Derive display name and fallback avatar
+  const displayName = useMemo(() => {
+    const base = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    return base || authUser?.displayName || authUser?.email || 'Profile';
+  }, [user.firstName, user.lastName, authUser]);
+
+  useEffect(() => {
+    async function loadProfile() {
+      if (!authUser?.id) return;
+      try {
+        const ref = doc(firestoreInstance, 'users', authUser.id);
+        const snap = await getDoc(ref);
+        const profile = snap.exists() ? snap.data() : {};
+        const merged = {
+          ...emptyProfile,
+          ...profile,
+          email: authUser.email || profile.email || '',
+          // If joinDate missing, set to today (display-only until saved)
+          joinDate: profile.joinDate || new Date().toISOString().slice(0, 10)
+        };
+        setUser(merged);
+        setEditForm({
+          firstName: merged.firstName || '',
+          lastName: merged.lastName || '',
+          email: merged.email || '',
+          phone: merged.phone || '',
+          location: merged.location || '',
+          bio: merged.bio || ''
+        });
+      } catch (_) {
+        // leave defaults
+      }
+    }
+    loadProfile();
+  }, [authUser]);
 
   const handleEditToggle = () => {
     if (isEditing) {
@@ -117,10 +147,17 @@ const Profile = () => {
     setIsEditing(!isEditing);
   };
 
-  const handleSave = () => {
-    setUser({ ...user, ...editForm });
-    setIsEditing(false);
-    console.log('Profile updated:', editForm);
+  const handleSave = async () => {
+    if (!authUser?.id) return;
+    const updates = { ...editForm };
+    try {
+      const ref = doc(firestoreInstance, 'users', authUser.id);
+      await setDoc(ref, { ...updates, joinDate: user.joinDate || new Date().toISOString().slice(0, 10) }, { merge: true });
+      setUser(prev => ({ ...prev, ...updates }));
+      setIsEditing(false);
+    } catch (e) {
+      console.error('Failed to save profile', e);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -164,8 +201,8 @@ const Profile = () => {
                 {/* Avatar */}
                 <div className="relative inline-block mb-4">
                   <img
-                    src={user.avatar}
-                    alt={`${user.firstName} ${user.lastName}`}
+                    src={user.avatar || 'https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=' + encodeURIComponent(displayName)}
+                    alt={displayName}
                     className="w-24 h-24 rounded-full object-cover mx-auto"
                   />
                   <button
@@ -177,26 +214,26 @@ const Profile = () => {
                 </div>
                 
                 <h2 className="text-xl font-bold text-gray-900 mb-1">
-                  {user.firstName} {user.lastName}
+                  {displayName}
                 </h2>
-                <p className="text-gray-600 text-sm mb-4">{user.location}</p>
+                <p className="text-gray-600 text-sm mb-4">{user.location || 'Add your location'}</p>
                 
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div>
-                    <div className="text-2xl font-bold text-teal-600">{user.stats.reviewsCount}</div>
+                    <div className="text-2xl font-bold text-teal-600">{user.stats?.reviewsCount ?? 0}</div>
                     <div className="text-xs text-gray-600">Reviews</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-rose-500">{user.stats.favoritesCount}</div>
+                    <div className="text-2xl font-bold text-rose-500">{user.stats?.favoritesCount ?? 0}</div>
                     <div className="text-xs text-gray-600">Favorites</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-yellow-500">{user.stats.photosCount}</div>
+                    <div className="text-2xl font-bold text-yellow-500">{user.stats?.photosCount ?? 0}</div>
                     <div className="text-xs text-gray-600">Photos</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-blue-500">{user.stats.helpfulVotes}</div>
+                    <div className="text-2xl font-bold text-blue-500">{user.stats?.helpfulVotes ?? 0}</div>
                     <div className="text-xs text-gray-600">Helpful</div>
                   </div>
                 </div>
@@ -278,7 +315,9 @@ const Profile = () => {
                       ) : (
                         <p className="flex items-center text-gray-900">
                           <User className="h-4 w-4 mr-2 text-gray-400" />
-                          {user.firstName}
+                          {user.firstName || (
+                            <button onClick={handleEditToggle} className="text-teal-600 underline">Add first name</button>
+                          )}
                         </p>
                       )}
                     </div>
@@ -296,7 +335,9 @@ const Profile = () => {
                       ) : (
                         <p className="flex items-center text-gray-900">
                           <User className="h-4 w-4 mr-2 text-gray-400" />
-                          {user.lastName}
+                          {user.lastName || (
+                            <button onClick={handleEditToggle} className="text-teal-600 underline">Add last name</button>
+                          )}
                         </p>
                       )}
                     </div>
@@ -332,7 +373,9 @@ const Profile = () => {
                       ) : (
                         <p className="flex items-center text-gray-900">
                           <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                          {user.phone}
+                          {user.phone || (
+                            <button onClick={handleEditToggle} className="text-teal-600 underline">Add phone</button>
+                          )}
                         </p>
                       )}
                     </div>
@@ -350,7 +393,9 @@ const Profile = () => {
                       ) : (
                         <p className="flex items-center text-gray-900">
                           <MapPin className="h-4 w-4 mr-2 text-gray-400" />
-                          {user.location}
+                          {user.location || (
+                            <button onClick={handleEditToggle} className="text-teal-600 underline">Add location</button>
+                          )}
                         </p>
                       )}
                     </div>
@@ -376,7 +421,9 @@ const Profile = () => {
                         placeholder="Tell us about yourself..."
                       />
                     ) : (
-                      <p className="text-gray-900">{user.bio}</p>
+                      <p className="text-gray-900">{user.bio || (
+                        <button onClick={handleEditToggle} className="text-teal-600 underline">Add a short bio</button>
+                      )}</p>
                     )}
                   </div>
                 </div>
@@ -388,14 +435,14 @@ const Profile = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Price Range</label>
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                        {user.preferences.preferredPrice}
+                        {user.preferences?.preferredPrice || '$$'}
                       </span>
                     </div>
                     
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Favorite Amenities</label>
                       <div className="flex flex-wrap gap-2">
-                        {user.preferences.favoriteAmenities.map((amenity) => (
+                        {(user.preferences?.favoriteAmenities || []).map((amenity) => (
                           <span
                             key={amenity}
                             className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
@@ -403,13 +450,16 @@ const Profile = () => {
                             {amenity}
                           </span>
                         ))}
+                        {(!user.preferences?.favoriteAmenities || user.preferences.favoriteAmenities.length === 0) && (
+                          <span className="text-sm text-gray-500">No favorites added</span>
+                        )}
                       </div>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Dietary Preferences</label>
                       <div className="flex flex-wrap gap-2">
-                        {user.preferences.dietaryRestrictions.map((restriction) => (
+                        {(user.preferences?.dietaryRestrictions || []).map((restriction) => (
                           <span
                             key={restriction}
                             className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800"
@@ -417,6 +467,9 @@ const Profile = () => {
                             {restriction}
                           </span>
                         ))}
+                        {(!user.preferences?.dietaryRestrictions || user.preferences.dietaryRestrictions.length === 0) && (
+                          <span className="text-sm text-gray-500">No dietary preferences set</span>
+                        )}
                       </div>
                     </div>
                   </div>

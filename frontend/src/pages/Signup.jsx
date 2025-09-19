@@ -1,8 +1,12 @@
 // src/pages/Signup.jsx
 import React, { useState } from 'react';
 import { Eye, EyeOff, Coffee, Mail, Lock, User, AlertCircle, Check } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const Signup = () => {
+  const { signup, loginWithGoogle, error: authError } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -10,7 +14,8 @@ const Signup = () => {
     password: '',
     confirmPassword: '',
     agreeToTerms: false,
-    subscribeNewsletter: true
+    subscribeNewsletter: true,
+    role: 'user'
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -103,24 +108,27 @@ const Signup = () => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Mock successful signup
-      console.log('Signup successful:', formData);
-      // In real app: redirect to verification page or dashboard
-      alert('Account created successfully! Please check your email for verification.');
-      
+      const displayName = `${formData.firstName} ${formData.lastName}`.trim();
+      const isAdmin = formData.role === 'owner';
+      await signup(formData.email, formData.password, { displayName, role: formData.role, isAdmin });
+      navigate('/');
     } catch (error) {
-      setErrors({ general: 'Signup failed. Please try again.' });
+      setErrors({ general: error?.message || 'Signup failed. Please try again.' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleSignup = () => {
-    console.log('Google signup clicked');
-    // In real app: implement Google OAuth
+  const handleGoogleSignup = async () => {
+    setIsLoading(true);
+    try {
+      await loginWithGoogle();
+      navigate('/');
+    } catch (error) {
+      setErrors({ general: error?.message || 'Google sign-in failed.' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleFacebookSignup = () => {
@@ -153,10 +161,10 @@ const Signup = () => {
         <div className="bg-white rounded-xl shadow-lg p-8">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {/* General Error */}
-            {errors.general && (
+            {(errors.general || authError) && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-2">
                 <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                <span className="text-red-700 text-sm">{errors.general}</span>
+                <span className="text-red-700 text-sm">{errors.general || authError}</span>
               </div>
             )}
 
@@ -208,6 +216,23 @@ const Signup = () => {
                   <p className="mt-1 text-sm text-red-600">{errors.lastName}</p>
                 )}
               </div>
+            </div>
+
+            {/* Role Selection */}
+            <div>
+              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
+                Sign up as
+              </label>
+              <select
+                id="role"
+                name="role"
+                value={formData.role}
+                onChange={handleInputChange}
+                className="block w-full px-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+              >
+                <option value="user">User</option>
+                <option value="owner">Cafe Owner</option>
+              </select>
             </div>
 
             {/* Email Field */}

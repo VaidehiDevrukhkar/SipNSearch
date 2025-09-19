@@ -1,18 +1,14 @@
 // src/components/Navbar.jsx
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import { Coffee, Menu, X, User } from 'lucide-react';
-// import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  // const { user, logout } = useContext(AuthContext);
-
-  // Mock user state for demo - replace with actual auth context
-  const user = null; // Set to null for logged out, or user object for logged in
+  const { user, logout, isAdmin } = useAuth();
 
   const handleLogout = () => {
-    // logout();
-    console.log('Logging out...');
+    logout();
   };
 
   return (
@@ -39,6 +35,11 @@ const Navbar = () => {
             <a href="/contact" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
               Contact
             </a>
+            {isAdmin && (
+              <a href="/admin" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
+                Admin
+              </a>
+            )}
           </div>
           
           {/* Desktop Auth Buttons */}
@@ -48,7 +49,7 @@ const Navbar = () => {
                 <div className="relative group">
                   <button className="flex items-center space-x-2 text-gray-700 hover:text-teal-700">
                     <User className="h-5 w-5" />
-                    <span className="font-medium">{user.name || 'Profile'}</span>
+                    <span className="font-medium">{user.displayName || user.email || 'Profile'}</span>
                   </button>
                   
                   {/* Dropdown Menu */}
@@ -57,6 +58,11 @@ const Navbar = () => {
                       <a href="/profile" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
                         My Profile
                       </a>
+                      {isAdmin && (
+                        <a href="/admin" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
+                          Admin Panel
+                        </a>
+                      )}
                       <a href="/favorites" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
                         My Favorites
                       </a>
@@ -121,11 +127,16 @@ const Navbar = () => {
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 text-gray-700">
                   <User className="h-5 w-5" />
-                  <span className="font-medium">{user.name || 'Profile'}</span>
+                  <span className="font-medium">{user.displayName || user.email || 'Profile'}</span>
                 </div>
                 <a href="/profile" className="block text-gray-600 hover:text-teal-700 ml-7">
                   My Profile
                 </a>
+                {isAdmin && (
+                  <a href="/admin" className="block text-gray-600 hover:text-teal-700 ml-7">
+                    Admin Panel
+                  </a>
+                )}
                 <a href="/favorites" className="block text-gray-600 hover:text-teal-700 ml-7">
                   My Favorites
                 </a>

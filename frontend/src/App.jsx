@@ -7,21 +7,27 @@ import Profile from "./pages/Profile";
 import AdminPanel from "./pages/AdminPanel";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import { AuthProvider } from './context/AuthContext';
+import { CafeProvider } from './context/CafeContext';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/cafe/:id" element={<CafeDetails />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/admin" element={<AdminPanel />} />
-      </Routes>
-      <Footer />
-    </BrowserRouter>
+    <AuthProvider>
+      <CafeProvider>
+        <BrowserRouter>
+          {/* <Navbar /> */}
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/cafe/:id" element={<CafeDetails />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/admin" element={<AdminPanel />} />
+          </Routes>
+          <Footer />
+        </BrowserRouter>
+      </CafeProvider>
+    </AuthProvider>
   );
 }
 

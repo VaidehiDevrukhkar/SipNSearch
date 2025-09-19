@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { fetchCafes, createCafe, updateCafe, deleteCafe, getCafeById } from '../services/cafeService';
+import { useAuth } from './AuthContext';
 
 const CafeContext = createContext(null);
 
@@ -7,12 +8,13 @@ export function CafeProvider({ children }) {
 	const [cafes, setCafes] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState(null);
+    const { user, isAdmin } = useAuth();
 
 	async function load(options = {}) {
 		setLoading(true);
 		setError(null);
 		try {
-			const data = await fetchCafes(options);
+			const data = await fetchCafes({ onlyAdminPosted: true, ...options });
 			setCafes(data);
 		} catch (e) {
 			setError(e.message || 'Failed to load cafes');
@@ -22,7 +24,11 @@ export function CafeProvider({ children }) {
 	}
 
 	async function addCafe(data) {
-		const created = await createCafe(data);
+		const created = await createCafe({
+			...data,
+			createdAt: Date.now(),
+			createdBy: user ? { id: user.id, email: user.email, isAdmin: !!isAdmin } : null
+		});
 		setCafes(prev => [created, ...prev]);
 		return created;
 	}

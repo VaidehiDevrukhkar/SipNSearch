@@ -1,15 +1,16 @@
 // src/pages/Home.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, MapPin, Star, Coffee, Wifi, Heart, Filter, Grid, Map, TrendingUp, Award, Clock } from 'lucide-react';
 
 // Import components
-// import Navbar from '../components/Navbar';
+import Navbar from '../components/Navbar';
 // import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
 import CafeCard from '../components/CafeCard';
 import MapComponent from '../components/MapComponent';
+import { useCafes } from '../context/CafeContext';
 
-// Mock data for cafes
+// Mock data removed; we now use cafes from context
 const mockCafes = [
   {
     id: 1,
@@ -297,6 +298,7 @@ const FeaturedCafes = ({ cafes, onCafeSelect, onFavorite }) => {
 
 // Main Home Component
 export default function Home() {
+  const { cafes, load } = useCafes();
   const [searchTerm, setSearchTerm] = useState('');
   const [view, setView] = useState('list');
   const [filters, setFilters] = useState({
@@ -305,20 +307,26 @@ export default function Home() {
     amenity: '',
     status: ''
   });
-  const [sortBy, setSortBy] = useState('distance');
-  const [filteredCafes, setFilteredCafes] = useState(mockCafes);
+  const [sortBy, setSortBy] = useState('rating');
+  const [filteredCafes, setFilteredCafes] = useState([]);
+  const visibleCafes = useMemo(() => filteredCafes.slice(0, 10), [filteredCafes]);
   const [selectedCafe, setSelectedCafe] = useState(null);
+
+  useEffect(() => {
+    load();
+  }, []);
 
   // Filter and sort cafes
   useEffect(() => {
-    let filtered = mockCafes;
+    let source = cafes || [];
+    let filtered = source;
     
     // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter(cafe =>
         cafe.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         cafe.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cafe.amenities.some(amenity => amenity.toLowerCase().includes(searchTerm.toLowerCase()))
+        Array.isArray(cafe.amenities) && cafe.amenities.some(amenity => amenity.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
     
@@ -332,7 +340,7 @@ export default function Home() {
     }
     
     if (filters.amenity) {
-      filtered = filtered.filter(cafe => cafe.amenities.includes(filters.amenity));
+      filtered = filtered.filter(cafe => Array.isArray(cafe.amenities) && cafe.amenities.includes(filters.amenity));
     }
 
     if (filters.status === 'open') {
@@ -342,7 +350,7 @@ export default function Home() {
     // Apply sorting
     switch (sortBy) {
       case 'rating':
-        filtered.sort((a, b) => b.rating - a.rating);
+        filtered.sort((a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0));
         break;
       case 'reviews':
         filtered.sort((a, b) => b.reviews - a.reviews);
@@ -352,12 +360,12 @@ export default function Home() {
         break;
       case 'distance':
       default:
-        filtered.sort((a, b) => a.distance - b.distance);
+        filtered.sort((a, b) => Number(a.distance ?? 0) - Number(b.distance ?? 0));
         break;
     }
     
     setFilteredCafes(filtered);
-  }, [searchTerm, filters, sortBy]);
+  }, [cafes, searchTerm, filters, sortBy]);
 
   const handleSearch = (term) => {
     setSearchTerm(term);
@@ -379,7 +387,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-rose-50">
-      {/* <Navbar /> */}
+      <Navbar />
       
       {/* Hero Section */}
       <HeroSection 
@@ -393,7 +401,7 @@ export default function Home() {
       
       {/* Featured Cafes */}
       <FeaturedCafes 
-        cafes={mockCafes}
+        cafes={visibleCafes}
         onCafeSelect={handleCafeSelect}
         onFavorite={handleFavorite}
       />
@@ -426,9 +434,9 @@ export default function Home() {
             </div>
             
             {/* Cafe Grid */}
-            {filteredCafes.length > 0 ? (
+            {visibleCafes.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredCafes.map(cafe => (
+                {visibleCafes.map(cafe => (
                   <CafeCard 
                     key={cafe.id} 
                     cafe={cafe} 
@@ -506,7 +514,7 @@ export default function Home() {
                       <p className="text-sm text-gray-600">{filteredCafes.length} results</p>
                     </div>
                     <div className="divide-y divide-gray-200">
-                      {filteredCafes.slice(0, 10).map(cafe => (
+                      {visibleCafes.map(cafe => (
                         <div 
                           key={cafe.id}
                           className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
