@@ -1,5 +1,6 @@
 // src/components/CafeCard.jsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Star, Heart, MapPin, Clock, Wifi, Phone, ExternalLink } from 'lucide-react';
 
 const CafeCard = ({ 
@@ -9,8 +10,10 @@ const CafeCard = ({
   layout = 'grid', // 'grid' or 'list'
   showFullDetails = false 
 }) => {
+  const navigate = useNavigate();
   const [isFavorited, setIsFavorited] = useState(cafe.isFavorited || false);
   const [imageError, setImageError] = useState(false);
+  const imageSrc = !imageError && cafe.image ? cafe.image : '/vite.svg';
   
   const handleFavorite = (e) => {
     e.stopPropagation();
@@ -19,7 +22,11 @@ const CafeCard = ({
   };
 
   const handleViewDetails = () => {
-    onViewDetails?.(cafe.id);
+    if (onViewDetails) {
+      onViewDetails(cafe.id);
+    } else {
+      navigate(`/cafe/${cafe.id}`);
+    }
   };
   
   const getAmenityIcon = (amenity) => {
@@ -67,17 +74,19 @@ const CafeCard = ({
         <div className="flex">
           {/* Image */}
           <div className="relative w-48 h-32 flex-shrink-0">
-            {!imageError ? (
+            {!imageError && cafe.image ? (
               <img
-                src={cafe.image}
+                src={imageSrc}
                 alt={cafe.name}
                 className="w-full h-full object-cover"
                 onError={() => setImageError(true)}
               />
             ) : (
-              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                <span className="text-4xl">☕</span>
-              </div>
+              <img
+                src={'/vite.svg'}
+                alt={cafe.name}
+                className="w-full h-full object-cover"
+              />
             )}
             
             <button
@@ -147,17 +156,19 @@ const CafeCard = ({
     <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer" onClick={handleViewDetails}>
       {/* Image */}
       <div className="relative">
-        {!imageError ? (
+        {!imageError && cafe.image ? (
           <img
-            src={cafe.image}
+            src={imageSrc}
             alt={cafe.name}
             className="w-full h-48 object-cover"
             onError={() => setImageError(true)}
           />
         ) : (
-          <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
-            <span className="text-6xl">☕</span>
-          </div>
+          <img
+            src={'/vite.svg'}
+            alt={cafe.name}
+            className="w-full h-48 object-cover"
+          />
         )}
         
         <button

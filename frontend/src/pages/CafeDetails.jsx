@@ -1,5 +1,6 @@
 // src/pages/CafeDetails.jsx
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { 
   ArrowLeft, Star, Heart, Share2, MapPin, Clock, Phone, Globe, 
   Wifi, Car, Coffee, Users, Volume2, Leaf, Dog, Camera,
@@ -10,6 +11,8 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import MapComponent from '../components/MapComponent';
 import ReviewCard from '../components/ReviewCard';
+import { useAuth } from '../context/AuthContext';
+import { getCafeById } from '../services/cafeService';
 
 // Mock cafe data - in real app, this would come from API based on cafe ID
 const mockCafeDetails = {
@@ -220,7 +223,7 @@ const ImageGallery = ({ images, cafeName }) => {
 };
 
 // Cafe Header Component
-const CafeHeader = ({ cafe, onBack }) => {
+const CafeHeader = ({ cafe, onBack, onToggleFavorite, isAuthenticated }) => {
   const [isFavorited, setIsFavorited] = useState(false);
   
   const handleShare = async () => {
@@ -298,7 +301,16 @@ const CafeHeader = ({ cafe, onBack }) => {
           
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => setIsFavorited(!isFavorited)}
+              onClick={() => {
+                const allowed = isAuthenticated ? true : false;
+                if (onToggleFavorite) {
+                  const result = onToggleFavorite();
+                  if (result === false) return; // parent redirected to login
+                } else if (!allowed) {
+                  return; // blocked
+                }
+                setIsFavorited(!isFavorited);
+              }}
               className={`p-3 rounded-full transition-colors ${
                 isFavorited
                   ? 'bg-red-50 text-red-600'
@@ -317,7 +329,15 @@ const CafeHeader = ({ cafe, onBack }) => {
               <Share2 className="h-5 w-5" />
             </button>
             
-            <button className="bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 transition-colors font-medium">
+            <button
+              onClick={() => {
+                if (!isAuthenticated) {
+                  // parent should handle redirect before; this is a fallback noop
+                  return;
+                }
+              }}
+              className="bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 transition-colors font-medium"
+            >
               Write Review
             </button>
           </div>
@@ -329,23 +349,57 @@ const CafeHeader = ({ cafe, onBack }) => {
 
 // Main Cafe Details Component
 export default function CafeDetails({ cafeId }) {
+  const params = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [cafe, setCafe] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real app, fetch cafe details from API using cafeId
-    setTimeout(() => {
-      setCafe(mockCafeDetails);
-      setReviews(mockReviews);
-      setLoading(false);
-    }, 1000);
-  }, [cafeId]);
+    const id = cafeId || params.id;
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        let details = null;
+        if (id) {
+          details = await getCafeById(id);
+        }
+        if (!details) {
+          // fallback to mock while no backend data exists for this id
+          details = { ...mockCafeDetails, id: id || mockCafeDetails.id };
+        }
+        if (!cancelled) {
+          setCafe(details);
+          setReviews(mockReviews);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [cafeId, params.id]);
 
   const handleBack = () => {
-    // In a real app, use navigate(-1) or navigate('/')
-    console.log('Going back...');
+    navigate(-1);
+  };
+
+  const requireAuth = (action) => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return false;
+    }
+    return true;
+  };
+
+  const handleToggleFavorite = () => {
+    return requireAuth('favorite');
   };
 
   const handleReviewHelpful = (reviewId, isHelpful) => {
@@ -386,10 +440,25 @@ export default function CafeDetails({ cafeId }) {
     );
   }
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <CafeHeader cafe={cafe} onBack={handleBack} />
+      <CafeHeader cafe={cafe} onBack={handleBack} onToggleFavorite={handleToggleFavorite} isAuthenticated={isAuthenticated} />
       
       {/* Image Gallery */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -483,7 +552,10 @@ export default function CafeDetails({ cafeId }) {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-gray-900">Reviews ({cafe.reviews})</h2>
-                <button className="bg-teal-700 text-white px-4 py-2 rounded-lg hover:bg-teal-800 transition-colors font-medium">
+                <button
+                  onClick={() => requireAuth('write-review') && null}
+                  className="bg-teal-700 text-white px-4 py-2 rounded-lg hover:bg-teal-800 transition-colors font-medium"
+                >
                   Write a Review
                 </button>
               </div>
@@ -645,7 +717,10 @@ export default function CafeDetails({ cafeId }) {
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
                 <div className="space-y-3">
-                  <button className="w-full flex items-center justify-center space-x-2 bg-teal-700 text-white py-3 rounded-lg hover:bg-teal-800 transition-colors font-medium">
+                <button
+                  onClick={() => requireAuth('write-review') && null}
+                  className="w-full flex items-center justify-center space-x-2 bg-teal-700 text-white py-3 rounded-lg hover:bg-teal-800 transition-colors font-medium"
+                >
                     <MessageCircle className="h-4 w-4" />
                     <span>Write Review</span>
                   </button>

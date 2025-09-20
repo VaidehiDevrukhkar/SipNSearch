@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Profile from "./pages/Profile";
 import AdminPanel from "./pages/AdminPanel";
+import Browse from "./pages/Browse";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import { AuthProvider } from './context/AuthContext';
@@ -18,6 +19,7 @@ function App() {
           {/* <Navbar /> */}
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/cafes" element={<Browse />} />
             <Route path="/cafe/:id" element={<CafeDetails />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />

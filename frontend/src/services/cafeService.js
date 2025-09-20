@@ -49,8 +49,18 @@ export async function fetchCafes({ search = '', filters = {}, sortBy = 'distance
     // Load CSV cafes from public file
     let csvCafes = [];
     try {
-        const res = await fetch('/filtered_cafes.csv');
-        const text = await res.text();
+        // Prefer the extended dataset if available; fallback to filtered_cafes.csv
+        let text = '';
+        try {
+            const resPrimary = await fetch('/Zomato_Mumbai_Extended.csv');
+            if (resPrimary.ok) {
+                text = await resPrimary.text();
+            }
+        } catch (_) {}
+        if (!text) {
+            const resFallback = await fetch('/filtered_cafes.csv');
+            text = await resFallback.text();
+        }
         const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
         csvCafes = (parsed.data || []).map((row, idx) => normalizeCafe({
             name: row.NAME,
@@ -60,7 +70,7 @@ export async function fetchCafes({ search = '', filters = {}, sortBy = 'distance
                 const p = Number(row.PRICE);
                 if (p >= 1500) return 3; if (p >= 700) return 2; return 1;
             })(),
-            rating: Number((row.RATING || '').replace(/NEW/i, '0')) || 0,
+            rating: Number((row.RATING || '').toString().replace(/NEW/i, '0')) || 0,
             reviews: Number(row.VOTES || 0),
             hours: row.TIMING || '',
             featured: false,

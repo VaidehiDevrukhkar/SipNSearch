@@ -14,7 +14,8 @@ export function CafeProvider({ children }) {
 		setLoading(true);
 		setError(null);
 		try {
-			const data = await fetchCafes({ onlyAdminPosted: true, ...options });
+			// Include all cafes from Firebase and CSV
+			const data = await fetchCafes({ ...options });
 			setCafes(data);
 		} catch (e) {
 			setError(e.message || 'Failed to load cafes');
