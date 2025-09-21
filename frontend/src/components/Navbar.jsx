@@ -1,5 +1,6 @@
 // src/components/Navbar.jsx
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Coffee, Menu, X, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -23,22 +24,22 @@ const Navbar = () => {
           
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <a href="/" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
+            <Link to="/" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
               Home
-            </a>
-            <a href="/cafes" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
+            </Link>
+            <Link to="/cafes" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
               Browse Cafes
-            </a>
-            <a href="/about" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
+            </Link>
+            <Link to="/about" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
               About
-            </a>
-            <a href="/contact" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
+            </Link>
+            <Link to="/contact" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
               Contact
-            </a>
+            </Link>
             {isAdmin && (
-              <a href="/admin" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
+              <Link to="/admin" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
                 Admin
-              </a>
+              </Link>
             )}
           </div>
           
@@ -55,20 +56,20 @@ const Navbar = () => {
                   {/* Dropdown Menu */}
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
                     <div className="py-2">
-                      <a href="/profile" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
+                      <Link to="/profile" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
                         My Profile
-                      </a>
+                      </Link>
                       {isAdmin && (
-                        <a href="/admin" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
+                        <Link to="/admin" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
                           Admin Panel
-                        </a>
+                        </Link>
                       )}
-                      <a href="/favorites" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
+                      <Link to="/favorites" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
                         My Favorites
-                      </a>
-                      <a href="/reviews" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
+                      </Link>
+                      <Link to="/reviews" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">
                         My Reviews
-                      </a>
+                      </Link>
                       <hr className="my-2" />
                       <button 
                         onClick={handleLogout}
@@ -82,12 +83,12 @@ const Navbar = () => {
               </div>
             ) : (
               <>
-                <a href="/login" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
+                <Link to="/login" className="text-gray-700 hover:text-teal-700 font-medium transition-colors">
                   Login
-                </a>
-                <a href="/signup" className="bg-teal-700 text-white px-4 py-2 rounded-lg hover:bg-teal-800 transition-colors font-medium">
+                </Link>
+                <Link to="/signup" className="bg-teal-700 text-white px-4 py-2 rounded-lg hover:bg-teal-800 transition-colors font-medium">
                   Sign Up
-                </a>
+                </Link>
               </>
             )}
           </div>
@@ -108,18 +109,18 @@ const Navbar = () => {
       {isMenuOpen && (
         <div className="md:hidden bg-white border-t border-gray-200">
           <div className="px-4 py-4 space-y-4">
-            <a href="/" className="block text-gray-700 hover:text-teal-700 font-medium">
+            <Link to="/" className="block text-gray-700 hover:text-teal-700 font-medium">
               Home
-            </a>
-            <a href="/cafes" className="block text-gray-700 hover:text-teal-700 font-medium">
+            </Link>
+            <Link to="/cafes" className="block text-gray-700 hover:text-teal-700 font-medium">
               Browse Cafes
-            </a>
-            <a href="/about" className="block text-gray-700 hover:text-teal-700 font-medium">
+            </Link>
+            <Link to="/about" className="block text-gray-700 hover:text-teal-700 font-medium">
               About
-            </a>
-            <a href="/contact" className="block text-gray-700 hover:text-teal-700 font-medium">
+            </Link>
+            <Link to="/contact" className="block text-gray-700 hover:text-teal-700 font-medium">
               Contact
-            </a>
+            </Link>
             
             <hr className="my-4" />
             
@@ -129,20 +130,20 @@ const Navbar = () => {
                   <User className="h-5 w-5" />
                   <span className="font-medium">{user.displayName || user.email || 'Profile'}</span>
                 </div>
-                <a href="/profile" className="block text-gray-600 hover:text-teal-700 ml-7">
+                <Link to="/profile" className="block text-gray-600 hover:text-teal-700 ml-7">
                   My Profile
-                </a>
+                </Link>
                 {isAdmin && (
-                  <a href="/admin" className="block text-gray-600 hover:text-teal-700 ml-7">
+                  <Link to="/admin" className="block text-gray-600 hover:text-teal-700 ml-7">
                     Admin Panel
-                  </a>
+                  </Link>
                 )}
-                <a href="/favorites" className="block text-gray-600 hover:text-teal-700 ml-7">
+                <Link to="/favorites" className="block text-gray-600 hover:text-teal-700 ml-7">
                   My Favorites
-                </a>
-                <a href="/reviews" className="block text-gray-600 hover:text-teal-700 ml-7">
+                </Link>
+                <Link to="/reviews" className="block text-gray-600 hover:text-teal-700 ml-7">
                   My Reviews
-                </a>
+                </Link>
                 <button 
                   onClick={handleLogout}
                   className="block text-gray-600 hover:text-teal-700 ml-7"
@@ -152,12 +153,12 @@ const Navbar = () => {
               </div>
             ) : (
               <div className="flex space-x-4">
-                <a href="/login" className="text-gray-700 hover:text-teal-700 font-medium">
+                <Link to="/login" className="text-gray-700 hover:text-teal-700 font-medium">
                   Login
-                </a>
-                <a href="/signup" className="bg-teal-700 text-white px-4 py-2 rounded-lg hover:bg-teal-800 transition-colors font-medium">
+                </Link>
+                <Link to="/signup" className="bg-teal-700 text-white px-4 py-2 rounded-lg hover:bg-teal-800 transition-colors font-medium">
                   Sign Up
-                </a>
+                </Link>
               </div>
             )}
           </div>

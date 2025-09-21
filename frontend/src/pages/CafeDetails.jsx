@@ -11,109 +11,241 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import MapComponent from '../components/MapComponent';
 import ReviewCard from '../components/ReviewCard';
+import ReviewForm from '../components/ReviewForm';
 import { useAuth } from '../context/AuthContext';
+import { useCafes } from '../context/CafeContext';
 import { getCafeById } from '../services/cafeService';
+import { db } from '../services/firebase';
 
-// Mock cafe data - in real app, this would come from API based on cafe ID
-const mockCafeDetails = {
-  id: 1,
-  name: "The Cozy Corner",
-  rating: 4.8,
-  reviews: 124,
-  address: "123 Main St, Downtown Mumbai, MH 400001",
-  phone: "+91 98765 43210",
-  website: "www.cozycorvner.com",
-  email: "hello@cozycorner.com",
-  coordinates: { lat: 19.0760, lng: 72.8777 },
-  images: [
-    "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800",
-    "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800",
-    "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=800",
-    "https://images.unsplash.com/photo-1521017432531-fbd92d768814?w=800",
-    "https://images.unsplash.com/photo-1442512595711-aca7af5b1b80?w=800"
-  ],
-  description: "A warm and inviting neighborhood cafe that serves exceptional coffee and homemade pastries. Perfect for working, reading, or catching up with friends in a cozy atmosphere.",
-  price: "$$",
-  cuisine: ["Coffee", "Pastries", "Light Meals", "Vegan Options"],
-  amenities: [
-    { id: 'wifi', name: 'Free WiFi', icon: Wifi, available: true },
-    { id: 'parking', name: 'Parking', icon: Car, available: true },
-    { id: 'outdoor', name: 'Outdoor Seating', icon: Users, available: true },
-    { id: 'quiet', name: 'Quiet Environment', icon: Volume2, available: false },
-    { id: 'vegan', name: 'Vegan Friendly', icon: Leaf, available: true },
-    { id: 'pets', name: 'Pet Friendly', icon: Dog, available: true }
-  ],
-  hours: {
-    Monday: "7:00 AM - 10:00 PM",
-    Tuesday: "7:00 AM - 10:00 PM", 
-    Wednesday: "7:00 AM - 10:00 PM",
-    Thursday: "7:00 AM - 10:00 PM",
-    Friday: "7:00 AM - 11:00 PM",
-    Saturday: "8:00 AM - 11:00 PM",
-    Sunday: "8:00 AM - 9:00 PM"
-  },
-  currentlyOpen: true,
-  featured: true,
-  verified: true,
-  tags: ["Cozy", "Work-Friendly", "Date Spot", "Family-Friendly"],
-  menu: {
-    coffee: [
-      { name: "Americano", price: "₹120" },
-      { name: "Cappuccino", price: "₹150" },
-      { name: "Latte", price: "₹180" },
-      { name: "Espresso", price: "₹100" }
-    ],
-    food: [
-      { name: "Avocado Toast", price: "₹220" },
-      { name: "Croissant", price: "₹80" },
-      { name: "Pasta", price: "₹320" },
-      { name: "Salad Bowl", price: "₹280" }
-    ]
+// Utility function to generate cafe images using Unsplash API
+const generateCafeImages = (cafeName, count = 5) => {
+  const imageQueries = [
+    'coffee shop interior',
+    'cafe atmosphere',
+    'coffee shop seating',
+    'cafe exterior',
+    'coffee barista',
+    'cafe food',
+    'latte art',
+    'cozy cafe'
+  ];
+  
+  // Use Unsplash Source API for reliable random images
+  return Array.from({ length: count }, (_, index) => {
+    const query = imageQueries[index % imageQueries.length];
+    const seed = cafeName ? cafeName.replace(/\s+/g, '') + index : 'cafe' + index;
+    return `https://source.unsplash.com/800x600/?${encodeURIComponent(query)}&sig=${seed}`;
+  });
+};
+
+// Function to parse CSV tags and create amenities
+const parseAmenities = (tags = '') => {
+  // Ensure tags is a string and handle null/undefined cases
+  const tagsString = tags != null ? String(tags) : '';
+  const tagArray = tagsString.toLowerCase().split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+  
+  const amenityMapping = {
+    'wifi': { id: 'wifi', name: 'Free WiFi', icon: Wifi, available: true },
+    'parking': { id: 'parking', name: 'Parking', icon: Car, available: true },
+    'outdoor': { id: 'outdoor', name: 'Outdoor Seating', icon: Users, available: true },
+    'pet': { id: 'pets', name: 'Pet Friendly', icon: Dog, available: true },
+    'vegan': { id: 'vegan', name: 'Vegan Options', icon: Leaf, available: true },
+    'quiet': { id: 'quiet', name: 'Quiet Environment', icon: Volume2, available: true },
+    'work': { id: 'work', name: 'Work Friendly', icon: Coffee, available: true }
+  };
+  
+  const detectedAmenities = [];
+  
+  // Check for common amenity keywords in tags
+  Object.entries(amenityMapping).forEach(([key, amenity]) => {
+    if (tagArray.some(tag => tag.includes(key))) {
+      detectedAmenities.push(amenity);
+    }
+  });
+  
+  // Add some default amenities if none detected
+  if (detectedAmenities.length === 0) {
+    detectedAmenities.push(
+      amenityMapping.wifi,
+      amenityMapping.outdoor,
+      amenityMapping.vegan
+    );
+  }
+  
+  return detectedAmenities;
+};
+
+// Function to generate realistic hours based on cafe type and location
+const generateHours = (tags = '') => {
+  // Ensure tags is a string and handle null/undefined cases
+  const tagsString = tags != null ? String(tags) : '';
+  const isWorkFriendly = tagsString.toLowerCase().includes('work');
+  const isCasual = tagsString.toLowerCase().includes('casual');
+  
+  if (isWorkFriendly) {
+    return {
+      Monday: "7:00 AM - 9:00 PM",
+      Tuesday: "7:00 AM - 9:00 PM",
+      Wednesday: "7:00 AM - 9:00 PM",
+      Thursday: "7:00 AM - 9:00 PM",
+      Friday: "7:00 AM - 10:00 PM",
+      Saturday: "8:00 AM - 10:00 PM",
+      Sunday: "8:00 AM - 8:00 PM"
+    };
+  } else {
+    return {
+      Monday: "8:00 AM - 8:00 PM",
+      Tuesday: "8:00 AM - 8:00 PM",
+      Wednesday: "8:00 AM - 8:00 PM",
+      Thursday: "8:00 AM - 8:00 PM",
+      Friday: "8:00 AM - 9:00 PM",
+      Saturday: "9:00 AM - 9:00 PM",
+      Sunday: "9:00 AM - 7:00 PM"
+    };
   }
 };
 
-const mockReviews = [
-  {
-    id: 1,
-    user: {
-      name: "Sarah Johnson",
-      avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=100",
-      isVerified: true,
-      totalReviews: 23
-    },
-    rating: 5,
-    title: "Perfect spot for remote work!",
-    text: "I've been coming here regularly for the past few months. The WiFi is reliable, coffee is excellent, and the atmosphere is perfect for getting work done. The staff is friendly and the seating is comfortable.",
-    date: "2024-01-15",
-    images: [
-      "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=300",
-      "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=300"
+// Function to generate menu based on cuisine category and price
+const generateMenu = (cuisineCategory = '', priceRange = '$$') => {
+  const cuisines = cuisineCategory.split(',').map(c => c.trim().toLowerCase());
+  
+  // Base prices based on price range
+  const priceMultiplier = {
+    '$': 0.7,
+    '$$': 1,
+    '$$$': 1.4,
+    '$$$$': 1.8
+  }[priceRange] || 1;
+  
+  const menu = {
+    coffee: [
+      { name: "Espresso", price: `₹${Math.round(80 * priceMultiplier)}` },
+      { name: "Americano", price: `₹${Math.round(100 * priceMultiplier)}` },
+      { name: "Cappuccino", price: `₹${Math.round(120 * priceMultiplier)}` },
+      { name: "Latte", price: `₹${Math.round(140 * priceMultiplier)}` },
+      { name: "Cold Brew", price: `₹${Math.round(160 * priceMultiplier)}` }
     ],
-    helpfulCount: 12,
-    tags: ["Work-friendly", "Great coffee", "Good WiFi"],
-    visitType: "Solo • Work"
-  },
-  {
-    id: 2,
-    user: {
-      name: "Mike Chen",
-      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100",
-      isVerified: false,
-      totalReviews: 8
-    },
-    rating: 4,
-    text: "Great coffee and pastries! The outdoor seating is lovely during good weather. Service can be a bit slow during peak hours but the quality makes up for it.",
-    date: "2024-01-10",
-    helpfulCount: 8,
-    tags: ["Great coffee", "Outdoor seating"],
-    visitType: "Couple • Casual",
-    businessResponse: {
-      businessName: "The Cozy Corner",
-      text: "Thank you for the feedback, Mike! We're working on improving our service speed during busy periods. Hope to see you again soon!",
-      date: "2024-01-12"
-    }
+    food: []
+  };
+  
+  // Add food items based on cuisine
+  if (cuisines.some(c => c.includes('italian'))) {
+    menu.food.push(
+      { name: "Margherita Pizza", price: `₹${Math.round(280 * priceMultiplier)}` },
+      { name: "Pasta Carbonara", price: `₹${Math.round(320 * priceMultiplier)}` }
+    );
   }
-];
+  
+  if (cuisines.some(c => c.includes('continental') || c.includes('western'))) {
+    menu.food.push(
+      { name: "Club Sandwich", price: `₹${Math.round(220 * priceMultiplier)}` },
+      { name: "Caesar Salad", price: `₹${Math.round(260 * priceMultiplier)}` }
+    );
+  }
+  
+  if (cuisines.some(c => c.includes('indian'))) {
+    menu.food.push(
+      { name: "Masala Chai", price: `₹${Math.round(40 * priceMultiplier)}` },
+      { name: "Samosa", price: `₹${Math.round(60 * priceMultiplier)}` }
+    );
+  }
+  
+  // Default items if no specific cuisine
+  if (menu.food.length === 0) {
+    menu.food.push(
+      { name: "Avocado Toast", price: `₹${Math.round(180 * priceMultiplier)}` },
+      { name: "Croissant", price: `₹${Math.round(80 * priceMultiplier)}` },
+      { name: "Bagel & Cream Cheese", price: `₹${Math.round(120 * priceMultiplier)}` },
+      { name: "Grilled Sandwich", price: `₹${Math.round(160 * priceMultiplier)}` }
+    );
+  }
+  
+  return menu;
+};
+
+// Function to get coordinates for Indian cities (you can expand this)
+const getCityCoordinates = (city, region) => {
+  const coordinates = {
+    'mumbai': { lat: 19.0760, lng: 72.8777 },
+    'delhi': { lat: 28.7041, lng: 77.1025 },
+    'bangalore': { lat: 12.9716, lng: 77.5946 },
+    'pune': { lat: 18.5204, lng: 73.8567 },
+    'chennai': { lat: 13.0827, lng: 80.2707 },
+    'kolkata': { lat: 22.5726, lng: 88.3639 },
+    'hyderabad': { lat: 17.3850, lng: 78.4867 },
+    'ahmedabad': { lat: 23.0225, lng: 72.5714 },
+    'jaipur': { lat: 26.9124, lng: 75.7873 },
+    'goa': { lat: 15.2993, lng: 74.1240 }
+  };
+  
+  const cityKey = city?.toLowerCase().trim();
+  return coordinates[cityKey] || { lat: 19.0760, lng: 72.8777 }; // Default to Mumbai
+};
+
+// Function to check if cafe is currently open
+const isCurrentlyOpen = () => {
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  // Most cafes are open between 8 AM to 8 PM
+  if (currentDay === 0) { // Sunday
+    return currentHour >= 9 && currentHour < 19;
+  } else if (currentDay === 6) { // Saturday
+    return currentHour >= 8 && currentHour < 21;
+  } else { // Weekdays
+    return currentHour >= 7 && currentHour < 21;
+  }
+};
+
+// Main function to transform CSV data to detailed cafe object
+const transformCafeData = (csvCafe) => {
+  if (!csvCafe) return null;
+  
+  // Handle different possible field names from CSV
+  const cafeName = csvCafe.NAME || csvCafe.name || csvCafe.cafe_name || csvCafe.restaurant_name || 'Unnamed Cafe';
+  const rating = parseFloat(csvCafe.RATING || csvCafe.rating || csvCafe.avg_rating) || 4.0;
+  const votes = parseInt(csvCafe.VOTES || csvCafe.votes || csvCafe.review_count) || Math.floor(Math.random() * 100) + 10;
+  const city = csvCafe.CITY || csvCafe.city || csvCafe.location || 'Mumbai';
+  const region = csvCafe.REGION || csvCafe.region || csvCafe.area || 'Downtown';
+  const price = csvCafe.PRICE || csvCafe.price || csvCafe.price_range || '$';
+  const cuisine = csvCafe.cuisine_category || csvCafe.cuisine || csvCafe.food_type || 'Multi-cuisine';
+  const tags = csvCafe.tags || csvCafe.amenities || '';
+  
+  console.log('Transforming cafe data:', { cafeName, rating, votes, city, region }); // Debug log
+  
+  // Safely handle tags - ensure it's a string before splitting
+  const tagsString = tags != null ? String(tags) : '';
+  const tagArray = tagsString.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+  
+  return {
+    id: csvCafe.id || cafeName?.replace(/\s+/g, '-').toLowerCase(),
+    name: cafeName,
+    rating: rating,
+    reviews: votes,
+    address: `${region}, ${city}, India`,
+    phone: `+91 ${Math.floor(Math.random() * 90000) + 10000} ${Math.floor(Math.random() * 90000) + 10000}`,
+    website: csvCafe.URL || `www.${cafeName?.replace(/\s+/g, '').toLowerCase()}.com`,
+    email: `hello@${cafeName?.replace(/\s+/g, '').toLowerCase()}.com`,
+    coordinates: getCityCoordinates(city, region),
+    images: generateCafeImages(cafeName),
+    description: `A delightful ${cuisine} cafe located in ${region}. Known for its ${csvCafe.RATING_TYPE || 'excellent'} ambiance and quality service. Perfect for ${tagArray.length > 0 ? tagArray.slice(0, 2).join(' and ') : 'dining and relaxation'}.`,
+    price: price,
+    cuisine: cuisine ? cuisine.split(',').map(c => c.trim()) : ['Coffee', 'Snacks'],
+    amenities: parseAmenities(tags),
+    hours: generateHours(tags),
+    timing: csvCafe.TIMING || csvCafe.timing,
+    currentlyOpen: isCurrentlyOpen(),
+    featured: rating >= 4.5,
+    verified: votes > 50,
+    tags: tagArray.length > 0 ? tagArray : ['Cozy', 'Family-Friendly'],
+    menu: generateMenu(cuisine, price),
+    ratingType: csvCafe.RATING_TYPE || csvCafe.rating_type,
+    city: city,
+    region: region,
+    pageNo: csvCafe['PAGE NO'] || csvCafe.page_no
+  };
+};
 
 // Image Gallery Component
 const ImageGallery = ({ images, cafeName }) => {
@@ -223,7 +355,7 @@ const ImageGallery = ({ images, cafeName }) => {
 };
 
 // Cafe Header Component
-const CafeHeader = ({ cafe, onBack, onToggleFavorite, isAuthenticated }) => {
+const CafeHeader = ({ cafe, onBack, onToggleFavorite, onWriteReview, isAuthenticated }) => {
   const [isFavorited, setIsFavorited] = useState(false);
   
   const handleShare = async () => {
@@ -231,7 +363,7 @@ const CafeHeader = ({ cafe, onBack, onToggleFavorite, isAuthenticated }) => {
       try {
         await navigator.share({
           title: cafe.name,
-          text: `Check out ${cafe.name} - a great cafe in Mumbai!`,
+          text: `Check out ${cafe.name} - a great cafe in ${cafe.city}!`,
           url: window.location.href,
         });
       } catch (err) {
@@ -330,12 +462,7 @@ const CafeHeader = ({ cafe, onBack, onToggleFavorite, isAuthenticated }) => {
             </button>
             
             <button
-              onClick={() => {
-                if (!isAuthenticated) {
-                  // parent should handle redirect before; this is a fallback noop
-                  return;
-                }
-              }}
+              onClick={onWriteReview}
               className="bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 transition-colors font-medium"
             >
               Write Review
@@ -352,39 +479,160 @@ export default function CafeDetails({ cafeId }) {
   const params = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, user } = useAuth();
+  const { cafes, getById } = useCafes();
   const [cafe, setCafe] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState(null);
 
   useEffect(() => {
     const id = cafeId || params.id;
     let cancelled = false;
-    async function load() {
+    
+    async function loadCafeData() {
       setLoading(true);
       try {
-        let details = null;
-        if (id) {
-          details = await getCafeById(id);
+        let rawCafeData = null;
+        
+        console.log('=== DEBUG INFO ===');
+        console.log('Looking for cafe with ID:', id);
+        console.log('Available cafes count:', cafes?.length || 0);
+        console.log('First few cafes:', cafes?.slice(0, 3));
+        
+        // First try to get from cafe context (CSV cafes)
+        if (cafes && cafes.length > 0) {
+          // Strategy 1: Direct field matching
+          rawCafeData = cafes.find(c => {
+            const matches = 
+              c.id === id || 
+              c.NAME === id || 
+              c.name === id ||
+              c.restaurant_name === id ||
+              c.cafe_name === id ||
+              c.NAME?.replace(/\s+/g, '-').toLowerCase() === id ||
+              c.name?.replace(/\s+/g, '-').toLowerCase() === id;
+            
+            if (matches) {
+              console.log('Found by direct match:', c);
+            }
+            return matches;
+          });
+          
+          // Strategy 2: If ID looks like csv_X, try to get by index
+          if (!rawCafeData && id && id.startsWith('csv_')) {
+            const index = parseInt(id.replace('csv_', ''));
+            console.log('Trying index:', index);
+            
+            if (!isNaN(index)) {
+              // Try 0-based index
+              if (index < cafes.length) {
+                rawCafeData = cafes[index];
+                console.log('Found by 0-based index:', rawCafeData);
+              }
+              // Try 1-based index
+              else if (index - 1 >= 0 && index - 1 < cafes.length) {
+                rawCafeData = cafes[index - 1];
+                console.log('Found by 1-based index:', rawCafeData);
+              }
+            }
+          }
+          
+          // Strategy 3: If still not found, try finding by any available identifier
+          if (!rawCafeData) {
+            console.log('Trying to find by any field containing the ID...');
+            rawCafeData = cafes.find((c, idx) => {
+              const cafeName = c.NAME || c.name || c.restaurant_name || c.cafe_name;
+              const cafeId = c.id || `cafe_${idx}`;
+              
+              console.log(`Checking cafe ${idx}:`, { cafeName, cafeId, originalId: id });
+              
+              return cafeId === id || 
+                     cafeName === id ||
+                     `csv_${idx}` === id ||
+                     `cafe_${idx}` === id;
+            });
+            
+            if (rawCafeData) {
+              console.log('Found by fallback strategy:', rawCafeData);
+            }
+          }
         }
-        if (!details) {
-          // fallback to mock while no backend data exists for this id
-          details = { ...mockCafeDetails, id: id || mockCafeDetails.id };
+        
+        // If not found, try the cafe service (Firebase)
+        if (!rawCafeData && id) {
+          console.log('Trying Firebase service...');
+          try {
+            rawCafeData = await getCafeById(id);
+            if (rawCafeData) console.log('Found in Firebase:', rawCafeData);
+          } catch (e) {
+            console.log('Firebase lookup failed:', e.message);
+          }
         }
+        
+        // If still not found, try the cafe context's getById method
+        if (!rawCafeData && id) {
+          console.log('Trying context getById...');
+          try {
+            rawCafeData = await getById(id);
+            if (rawCafeData) console.log('Found via context:', rawCafeData);
+          } catch (e) {
+            console.log('Context getById failed:', e.message);
+          }
+        }
+        
+        console.log('Final raw cafe data:', rawCafeData);
+        
+        if (rawCafeData && !cancelled) {
+          console.log('Transforming cafe data...');
+          
+          // Transform the raw CSV data into detailed cafe object
+          const transformedCafe = transformCafeData(rawCafeData);
+          console.log('Transformed cafe:', transformedCafe);
+          
+          setCafe(transformedCafe);
+          
+          // Load reviews from Firebase
+          try {
+            const cafeReviews = db.listReviews(transformedCafe.id);
+            setReviews(cafeReviews || []);
+          } catch (e) {
+            console.log('Review loading failed:', e.message);
+            setReviews([]);
+          }
+        } else if (!cancelled) {
+          console.log('❌ No cafe data found for ID:', id);
+          console.log('Available cafe IDs:', cafes?.map((c, i) => ({
+            index: i,
+            id: c.id,
+            name: c.NAME || c.name,
+            csvId: `csv_${i}`
+          })));
+          setCafe(null);
+          setReviews([]);
+        }
+      } catch (error) {
+        console.error('❌ Error loading cafe data:', error);
         if (!cancelled) {
-          setCafe(details);
-          setReviews(mockReviews);
+          setCafe(null);
+          setReviews([]);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
-    load();
+    
+    loadCafeData();
+    
     return () => {
       cancelled = true;
     };
-  }, [cafeId, params.id]);
+  }, [cafeId, params.id, cafes, getById]);
 
   const handleBack = () => {
     navigate(-1);
@@ -410,364 +658,339 @@ export default function CafeDetails({ cafeId }) {
     console.log('Report review:', reviewId);
   };
 
-  if (loading) {
+  const handleWriteReview = () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+    setShowReviewForm(true);
+    setReviewError(null);
+  };
+
+  const handleReviewSubmit = async (reviewData) => {
+    setReviewLoading(true);
+    setReviewError(null);
+    
+    try {
+      const newReview = db.createReview({
+        ...reviewData,
+        cafeId: cafe.id,
+        cafeName: cafe.name
+      });
+      
+      // Update local state
+      setReviews(prev => [newReview, ...prev]);
+      
+      // Update cafe stats
+      const cafeReviews = db.listReviews(cafe.id);
+      const totalReviews = cafeReviews.length;
+      const averageRating = totalReviews > 0 
+        ? cafeReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews 
+        : cafe.rating;
+      
+      setCafe(prev => ({
+        ...prev,
+        reviews: totalReviews,
+        rating: Math.round(averageRating * 10) / 10
+      }));
+      
+      setShowReviewForm(false);
+      alert('Review submitted successfully!');
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      setReviewError('Failed to submit review. Please try again.');
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  // Loading state
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-700 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading cafe details...</p>
+          </div>
         </div>
+        <Footer />
       </div>
     );
   }
 
+  // Cafe not found
   if (!cafe) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <div className="text-center py-20">
-          <Coffee className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Cafe Not Found</h2>
-          <p className="text-gray-600 mb-6">The cafe you're looking for doesn't exist.</p>
-          <button
-            onClick={handleBack}
-            className="bg-teal-700 text-white px-6 py-2 rounded-lg hover:bg-teal-800 transition-colors"
-          >
-            Go Back
-          </button>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">Cafe Not Found</h1>
+            <p className="text-gray-600 mb-8">The cafe you're looking for doesn't exist or has been removed.</p>
+            <button
+              onClick={handleBack}
+              className="bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
         </div>
+        <Footer />
       </div>
     );
-  }
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <CafeHeader cafe={cafe} onBack={handleBack} onToggleFavorite={handleToggleFavorite} isAuthenticated={isAuthenticated} />
       
-      {/* Image Gallery */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <ImageGallery images={cafe.images} cafeName={cafe.name} />
-      </div>
-      
+      {/* Cafe Header */}
+      <CafeHeader
+        cafe={cafe}
+        onBack={handleBack}
+        onToggleFavorite={handleToggleFavorite}
+        onWriteReview={handleWriteReview}
+        isAuthenticated={isAuthenticated}
+      />
+
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
+          {/* Left Column - Main Content */}
           <div className="lg:col-span-2 space-y-8">
-            {/* About Section */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">About</h2>
-              <p className="text-gray-700 leading-relaxed mb-6">{cafe.description}</p>
+            {/* Image Gallery */}
+            <ImageGallery images={cafe.images} cafeName={cafe.name} />
+
+            {/* Description */}
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">About</h2>
+              <p className="text-gray-700 leading-relaxed">{cafe.description}</p>
               
               {/* Tags */}
-              <div className="flex flex-wrap gap-2 mb-6">
+              <div className="flex flex-wrap gap-2 mt-4">
                 {cafe.tags.map((tag, index) => (
-                  <span key={index} className="bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-sm">
+                  <span
+                    key={index}
+                    className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm"
+                  >
                     {tag}
                   </span>
                 ))}
               </div>
-
-              {/* Cuisine */}
-              <div className="mb-6">
-                <h3 className="font-semibold text-gray-900 mb-2">Specialties</h3>
-                <div className="flex flex-wrap gap-2">
-                  {cafe.cuisine.map((item, index) => (
-                    <span key={index} className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* Amenities */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Amenities</h2>
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Amenities</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {cafe.amenities.map((amenity) => (
-                  <div key={amenity.id} className="flex items-center space-x-3">
-                    <amenity.icon className={`h-5 w-5 ${amenity.available ? 'text-green-600' : 'text-gray-400'}`} />
-                    <span className={amenity.available ? 'text-gray-900' : 'text-gray-400 line-through'}>
-                      {amenity.name}
-                    </span>
-                  </div>
-                ))}
+                {cafe.amenities.map((amenity) => {
+                  const IconComponent = amenity.icon;
+                  return (
+                    <div
+                      key={amenity.id}
+                      className={`flex items-center space-x-3 p-3 rounded-lg ${
+                        amenity.available
+                          ? 'bg-green-50 text-green-700'
+                          : 'bg-gray-50 text-gray-400'
+                      }`}
+                    >
+                      <IconComponent className="h-5 w-5" />
+                      <span className="font-medium">{amenity.name}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Menu Preview */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Menu Highlights</h2>
-                <button className="text-teal-600 hover:text-teal-700 font-medium text-sm">
-                  View Full Menu
-                </button>
-              </div>
-              
-              <div className="grid md:grid-cols-2 gap-6">
+            {/* Menu */}
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Menu</h2>
+              <div className="space-y-6">
+                {/* Coffee */}
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Coffee</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">Coffee & Beverages</h3>
                   <div className="space-y-2">
                     {cafe.menu.coffee.map((item, index) => (
-                      <div key={index} className="flex justify-between">
+                      <div key={index} className="flex justify-between items-center py-2">
                         <span className="text-gray-700">{item.name}</span>
                         <span className="font-medium text-gray-900">{item.price}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Food</h3>
-                  <div className="space-y-2">
-                    {cafe.menu.food.map((item, index) => (
-                      <div key={index} className="flex justify-between">
-                        <span className="text-gray-700">{item.name}</span>
-                        <span className="font-medium text-gray-900">{item.price}</span>
-                      </div>
-                    ))}
+
+                {/* Food */}
+                {cafe.menu.food.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-3">Food</h3>
+                    <div className="space-y-2">
+                      {cafe.menu.food.map((item, index) => (
+                        <div key={index} className="flex justify-between items-center py-2">
+                          <span className="text-gray-700">{item.name}</span>
+                          <span className="font-medium text-gray-900">{item.price}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Reviews Section */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Reviews ({cafe.reviews})</h2>
+            {/* Reviews */}
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Reviews ({reviews.length})
+                </h2>
                 <button
-                  onClick={() => requireAuth('write-review') && null}
-                  className="bg-teal-700 text-white px-4 py-2 rounded-lg hover:bg-teal-800 transition-colors font-medium"
+                  onClick={handleWriteReview}
+                  className="bg-teal-700 text-white px-4 py-2 rounded-lg hover:bg-teal-800 transition-colors"
                 >
                   Write a Review
                 </button>
               </div>
-              
-              {/* Review Summary */}
-              <div className="grid md:grid-cols-2 gap-6 mb-8 p-4 bg-gray-50 rounded-lg">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-gray-900 mb-2">{cafe.rating}</div>
-                  <div className="flex justify-center mb-2">
-                    {Array.from({ length: 5 }, (_, i) => (
-                      <Star
-                        key={i}
-                        className={`h-5 w-5 ${
-                          i < Math.floor(cafe.rating)
-                            ? 'text-yellow-400 fill-yellow-400'
-                            : 'text-gray-300'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-gray-600">{cafe.reviews} reviews</p>
+
+              {reviews.length > 0 ? (
+                <div className="space-y-6">
+                  {reviews.map((review) => (
+                    <ReviewCard
+                      key={review.id}
+                      review={review}
+                      onHelpful={(isHelpful) => handleReviewHelpful(review.id, isHelpful)}
+                      onReport={() => handleReportReview(review.id)}
+                    />
+                  ))}
                 </div>
-                
-                <div className="space-y-2">
-                  {[5, 4, 3, 2, 1].map((stars) => {
-                    const percentage = Math.random() * 80 + 10; // Mock percentages
-                    return (
-                      <div key={stars} className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-600 w-8">{stars}★</span>
-                        <div className="flex-1 bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-yellow-400 h-2 rounded-full"
-                            style={{ width: `${percentage}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-sm text-gray-600 w-12">{percentage.toFixed(0)}%</span>
-                      </div>
-                    );
-                  })}
+              ) : (
+                <div className="text-center py-8">
+                  <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 mb-4">No reviews yet. Be the first to review!</p>
+                  <button
+                    onClick={handleWriteReview}
+                    className="bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 transition-colors"
+                  >
+                    Write First Review
+                  </button>
                 </div>
-              </div>
-              
-              {/* Individual Reviews */}
-              <div className="space-y-6">
-                {reviews.map((review) => (
-                  <ReviewCard
-                    key={review.id}
-                    review={review}
-                    onHelpful={handleReviewHelpful}
-                    onReport={handleReportReview}
-                  />
-                ))}
-              </div>
-              
-              <div className="text-center mt-8">
-                <button className="border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-                  Load More Reviews
-                </button>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-32 space-y-6">
-              {/* Contact Info */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact & Hours</h3>
-                
-                {/* Contact Details */}
-                <div className="space-y-3 mb-6">
-                  <div className="flex items-start space-x-3">
-                    <MapPin className="h-5 w-5 text-gray-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-gray-900 font-medium">Address</p>
-                      <p className="text-gray-600 text-sm">{cafe.address}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <Phone className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-gray-900 font-medium">Phone</p>
-                      <a href={`tel:${cafe.phone}`} className="text-teal-600 hover:text-teal-700 text-sm">
-                        {cafe.phone}
-                      </a>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <Globe className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-gray-900 font-medium">Website</p>
-                      <a 
-                        href={`https://${cafe.website}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-teal-600 hover:text-teal-700 text-sm"
-                      >
-                        {cafe.website}
-                      </a>
-                    </div>
+          {/* Right Sidebar */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Contact Info */}
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
+              <div className="space-y-3">
+                <div className="flex items-start space-x-3">
+                  <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-gray-600">Address</p>
+                    <p className="font-medium text-gray-900">{cafe.address}</p>
                   </div>
                 </div>
-                
-                {/* Hours */}
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <Clock className="h-5 w-5 text-gray-400" />
-                    <p className="text-gray-900 font-medium">Hours</p>
+
+                <div className="flex items-start space-x-3">
+                  <Phone className="h-5 w-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-gray-600">Phone</p>
+                    <a href={`tel:${cafe.phone}`} className="font-medium text-teal-700 hover:text-teal-800">
+                      {cafe.phone}
+                    </a>
                   </div>
-                  
-                  <div className="space-y-1 text-sm">
-                    {Object.entries(cafe.hours).map(([day, hours]) => {
-                      const isToday = day === new Date().toLocaleDateString('en-US', { weekday: 'long' });
-                      return (
-                        <div key={day} className={`flex justify-between ${isToday ? 'font-medium text-teal-700' : 'text-gray-600'}`}>
-                          <span>{day}</span>
-                          <span>{hours}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  <div className="mt-3 text-center">
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                      cafe.currentlyOpen 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {cafe.currentlyOpen ? 'Open Now' : 'Closed Now'}
-                    </span>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <Globe className="h-5 w-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-gray-600">Website</p>
+                    <a 
+                      href={`https://${cafe.website}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="font-medium text-teal-700 hover:text-teal-800"
+                    >
+                      {cafe.website}
+                    </a>
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Map */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Location</h3>
+            {/* Hours */}
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Opening Hours</h3>
+              <div className="space-y-2">
+                {Object.entries(cafe.hours).map(([day, hours]) => (
+                  <div key={day} className="flex justify-between items-center py-1">
+                    <span className="text-gray-700">{day}</span>
+                    <span className="font-medium text-gray-900">{hours}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Map */}
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Location</h3>
+              <div className="h-48 bg-gray-200 rounded-lg overflow-hidden">
                 <MapComponent
                   cafes={[cafe]}
                   center={cafe.coordinates}
                   zoom={15}
-                  height="250px"
-                  showControls={false}
+                  height="192px"
                 />
-                
-                <div className="mt-4 flex space-x-2">
-                  <button className="flex-1 bg-teal-700 text-white py-2 rounded-lg hover:bg-teal-800 transition-colors text-sm font-medium">
-                    Get Directions
-                  </button>
-                  <button className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
-                    Call Now
-                  </button>
-                </div>
               </div>
-
-              {/* Quick Actions */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                <div className="space-y-3">
-                <button
-                  onClick={() => requireAuth('write-review') && null}
-                  className="w-full flex items-center justify-center space-x-2 bg-teal-700 text-white py-3 rounded-lg hover:bg-teal-800 transition-colors font-medium"
-                >
-                    <MessageCircle className="h-4 w-4" />
-                    <span>Write Review</span>
-                  </button>
-                  
-                  <button className="w-full flex items-center justify-center space-x-2 border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors">
-                    <Camera className="h-4 w-4" />
-                    <span>Add Photos</span>
-                  </button>
-                  
-                  <button className="w-full flex items-center justify-center space-x-2 border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors">
-                    <Flag className="h-4 w-4" />
-                    <span>Report Issue</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Similar Cafes */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Similar Cafes</h3>
-                <div className="space-y-4">
-                  {/* Mock similar cafes */}
-                  {[
-                    { name: "Brew & Books", rating: 4.6, image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=100" },
-                    { name: "Garden Gate", rating: 4.7, image: "https://images.unsplash.com/photo-1521017432531-fbd92d768814?w=100" }
-                  ].map((similarCafe, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                      <img
-                        src={similarCafe.image}
-                        alt={similarCafe.name}
-                        className="w-12 h-12 rounded-lg object-cover"
-                      />
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{similarCafe.name}</h4>
-                        <div className="flex items-center space-x-1">
-                          <Star className="h-3 w-3 text-yellow-400 fill-yellow-400" />
-                          <span className="text-sm text-gray-600">{similarCafe.rating}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <button
+                onClick={() => {
+                  const query = encodeURIComponent(cafe.address);
+                  window.open(`https://maps.google.com/maps?q=${query}`, '_blank');
+                }}
+                className="w-full mt-3 bg-teal-700 text-white py-2 px-4 rounded-lg hover:bg-teal-800 transition-colors"
+              >
+                Open in Google Maps
+              </button>
             </div>
           </div>
         </div>
       </div>
-      
+
+      {/* Review Form Modal */}
+      {showReviewForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Write a Review</h3>
+                <button
+                  onClick={() => setShowReviewForm(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <span className="sr-only">Close</span>
+                  ×
+                </button>
+              </div>
+
+              {reviewError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+                  <p className="text-sm text-red-600">{reviewError}</p>
+                </div>
+              )}
+
+              <ReviewForm
+                cafeId={cafe.id}
+                cafeName={cafe.name}
+                onSubmit={handleReviewSubmit}
+                onCancel={() => setShowReviewForm(false)}
+                loading={reviewLoading}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );

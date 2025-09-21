@@ -188,7 +188,7 @@ export const auth = {
 	}
 };
 
-// Local Firestore-like API for cafes (unchanged)
+// Local Firestore-like API for cafes and reviews
 export const db = {
 	listCafes() {
 		return readJSON(STORAGE_KEYS.cafes, []);
@@ -215,6 +215,88 @@ export const db = {
 		const cafes = this.listCafes();
 		const updated = cafes.filter(c => c.id !== id);
 		writeJSON(STORAGE_KEYS.cafes, updated);
+	},
+
+	// Reviews API
+	listReviews(cafeId) {
+		const reviews = readJSON('sns_reviews', []);
+		return reviews.filter(r => r.cafeId === cafeId);
+	},
+	getReviewById(id) {
+		const reviews = readJSON('sns_reviews', []);
+		return reviews.find(r => r.id === id) || null;
+	},
+	createReview(reviewData) {
+		const reviews = readJSON('sns_reviews', []);
+		const review = {
+			id: generateId('review'),
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+			helpfulCount: 0,
+			...reviewData
+		};
+		reviews.push(review);
+		writeJSON('sns_reviews', reviews);
+		
+		// Update cafe review count and rating
+		this.updateCafeReviewStats(reviewData.cafeId);
+		
+		return review;
+	},
+	updateReview(id, updates) {
+		const reviews = readJSON('sns_reviews', []);
+		const index = reviews.findIndex(r => r.id === id);
+		if (index === -1) throw new Error('Review not found');
+		reviews[index] = { 
+			...reviews[index], 
+			...updates, 
+			updatedAt: new Date().toISOString() 
+		};
+		writeJSON('sns_reviews', reviews);
+		
+		// Update cafe review stats
+		this.updateCafeReviewStats(reviews[index].cafeId);
+		
+		return reviews[index];
+	},
+	deleteReview(id) {
+		const reviews = readJSON('sns_reviews', []);
+		const review = reviews.find(r => r.id === id);
+		if (!review) throw new Error('Review not found');
+		
+		const updated = reviews.filter(r => r.id !== id);
+		writeJSON('sns_reviews', updated);
+		
+		// Update cafe review stats
+		this.updateCafeReviewStats(review.cafeId);
+	},
+	updateCafeReviewStats(cafeId) {
+		const reviews = this.listReviews(cafeId);
+		const cafe = this.getCafeById(cafeId);
+		if (!cafe) return;
+		
+		const totalReviews = reviews.length;
+		const averageRating = totalReviews > 0 
+			? reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews 
+			: 0;
+		
+		this.updateCafe(cafeId, {
+			reviews: totalReviews,
+			rating: Math.round(averageRating * 10) / 10 // Round to 1 decimal place
+		});
+	},
+
+	// Helper function to find cafe by ID from any source
+	findCafeById(cafeId, cafeServiceCafes = []) {
+		// First try local storage
+		const localCafe = this.getCafeById(cafeId);
+		if (localCafe) return localCafe;
+		
+		// Then try cafe service cafes
+		const serviceCafe = cafeServiceCafes.find(c => c.id === cafeId);
+		if (serviceCafe) return serviceCafe;
+		
+		return null;
 	}
 };
 

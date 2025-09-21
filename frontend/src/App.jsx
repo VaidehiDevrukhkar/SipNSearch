@@ -6,6 +6,7 @@ import Signup from "./pages/Signup";
 import Profile from "./pages/Profile";
 import AdminPanel from "./pages/AdminPanel";
 import Browse from "./pages/Browse";
+import MyReviews from "./pages/MyReviews";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import { AuthProvider } from './context/AuthContext';
@@ -24,6 +25,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/reviews" element={<MyReviews />} />
             <Route path="/admin" element={<AdminPanel />} />
           </Routes>
           <Footer />
