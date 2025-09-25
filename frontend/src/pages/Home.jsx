@@ -8,62 +8,10 @@ import Navbar from '../components/Navbar';
 import SearchBar from '../components/SearchBar';
 import CafeCard from '../components/CafeCard';
 import MapComponent from '../components/MapComponent';
-import { useCafes } from '../context/CafeContext';
+import EventsCarousel from '../components/EventsCarousel';
+import { useCsvCafes } from '../hooks/useCsvCafes';
 import { useAuth } from '../context/AuthContext';
 
-// Transform cafe data for display (similar to CafeDetails.jsx)
-const transformCafeForDisplay = (csvCafe, index) => {
-  if (!csvCafe) return null;
-  
-  // Handle different possible field names from CSV
-  const cafeName = csvCafe.NAME || csvCafe.name || csvCafe.cafe_name || csvCafe.restaurant_name || `Cafe ${index + 1}`;
-  const rating = parseFloat(csvCafe.RATING || csvCafe.rating || csvCafe.aggregate_rating) || 4.0;
-  const votes = parseInt(csvCafe.VOTES || csvCafe.votes || csvCafe.review_count) || Math.floor(Math.random() * 100) + 10;
-  const city = csvCafe.CITY || csvCafe.city || csvCafe.locality || 'Mumbai';
-  const region = csvCafe.REGION || csvCafe.region || csvCafe.area || 'Downtown';
-  const price = csvCafe.PRICE || csvCafe.price || csvCafe.price_range || '$';
-  const cuisine = csvCafe.cuisine_category || csvCafe.cuisine || csvCafe.cuisines || 'Multi-cuisine';
-  
-  return {
-    id: csvCafe.id || `csv_${index}`,
-    name: cafeName,
-    rating: rating,
-    reviews: votes,
-    distance: Math.random() * 5, // Generate random distance for display
-    image: csvCafe.featured_image || `https://source.unsplash.com/400x300/?coffee-shop&sig=${cafeName}`,
-    address: `${region}, ${city}`,
-    price: price,
-    amenities: parseAmenities(csvCafe.tags || csvCafe.amenities || ''),
-    isOpen: isCurrentlyOpen(),
-    hours: '9:00 AM - 9:00 PM',
-    featured: rating >= 4.5,
-    cuisine: cuisine.split(',').map(c => c.trim()),
-    city: city,
-    region: region
-  };
-};
-
-// Parse amenities from CSV tags
-const parseAmenities = (tags = '') => {
-  const tagsString = tags != null ? String(tags) : '';
-  const tagArray = tagsString.toLowerCase().split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-  
-  const amenityList = [];
-  if (tagArray.some(tag => tag.includes('wifi'))) amenityList.push('wifi');
-  if (tagArray.some(tag => tag.includes('parking'))) amenityList.push('parking');
-  if (tagArray.some(tag => tag.includes('outdoor'))) amenityList.push('outdoor-seating');
-  if (tagArray.some(tag => tag.includes('pet'))) amenityList.push('pet-friendly');
-  if (tagArray.some(tag => tag.includes('vegan'))) amenityList.push('vegan-options');
-  
-  return amenityList;
-};
-
-// Check if cafe is currently open (simplified)
-const isCurrentlyOpen = () => {
-  const now = new Date();
-  const currentHour = now.getHours();
-  return currentHour >= 8 && currentHour < 22; // 8 AM to 10 PM
-};
 
 // Hero Section Component
 const HeroSection = ({ onSearch, searchTerm, setSearchTerm }) => {
@@ -283,15 +231,14 @@ const Top10CafesCarousel = ({ cafes, onCafeSelect, onFavorite }) => {
 export default function Home() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const { cafes, loading, error } = useCafes(); // Use the same context as CafeDetails
+  const { cafes, loading, error } = useCsvCafes(); // Use CSV-only cafes
   const [searchTerm, setSearchTerm] = useState('');
   const [displayCafes, setDisplayCafes] = useState([]);
 
-  // Transform CSV data for display when cafes data changes
+  // Use cafes directly from CSV (they already have images and events assigned)
   useEffect(() => {
     if (cafes && cafes.length > 0) {
-      const transformed = cafes.map((cafe, index) => transformCafeForDisplay(cafe, index));
-      setDisplayCafes(transformed.filter(Boolean));
+      setDisplayCafes(cafes);
     }
   }, [cafes]);
 
@@ -312,40 +259,17 @@ export default function Home() {
   const handleCafeSelect = (cafeId) => {
     console.log('Attempting to navigate to cafe with ID:', cafeId);
     
-    // Find the transformed cafe in displayCafes first
-    const displayCafe = displayCafes.find(cafe => cafe.id === cafeId);
+    // Find the cafe in displayCafes
+    const cafe = displayCafes.find(c => c.id === cafeId);
     
-    if (displayCafe) {
-      // Extract the index from the ID if it's in csv_X format
-      let cafeIndex = -1;
-      if (cafeId.startsWith('csv_')) {
-        cafeIndex = parseInt(cafeId.replace('csv_', ''));
-      } else {
-        // Find by matching the original cafe data
-        const originalCafe = cafes.find((c, index) => {
-          const cafeName = c.NAME || c.name || c.cafe_name || c.restaurant_name || `Cafe ${index + 1}`;
-          return cafeName === displayCafe.name;
-        });
-        if (originalCafe) {
-          cafeIndex = cafes.indexOf(originalCafe);
-        }
-      }
-      
-      if (cafeIndex >= 0 && cafeIndex < cafes.length) {
-        const urlId = `csv_${cafeIndex}`;
-        console.log('Navigating to cafe:', { 
-          originalId: cafeId, 
-          urlId, 
-          cafeIndex, 
-          cafeName: displayCafe.name 
-        });
-        navigate(`/cafe/${urlId}`);
-      } else {
-        console.error('Could not determine cafe index for:', displayCafe);
-        navigate(`/cafe/${cafeId}`);
-      }
+    if (cafe) {
+      console.log('Navigating to cafe:', { 
+        id: cafeId, 
+        name: cafe.name 
+      });
+      navigate(`/cafe/${cafeId}`);
     } else {
-      console.error('Cafe not found in display cafes for ID:', cafeId);
+      console.error('Cafe not found for ID:', cafeId);
       navigate(`/cafe/${cafeId}`);
     }
   };
@@ -401,6 +325,9 @@ export default function Home() {
       
       {/* Quick Stats */}
       <QuickStats cafes={displayCafes} />
+      
+      {/* Events Carousel */}
+      <EventsCarousel cafes={displayCafes} />
       
       {/* Top 10 Cafes Carousel */}
       <Top10CafesCarousel
